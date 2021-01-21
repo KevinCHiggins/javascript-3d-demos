@@ -1,0 +1,135 @@
+<!DOCTYPE HTML>
+<html>
+<canvas id="c" width="400px" height="400px">
+
+</canvas>
+<script>
+	'use strict';
+	let matrices = loadMatrices();
+	let c = document.getElementById('c');
+	let ctx = c.getContext('2d');
+	ctx.translate(200, 200); // set origin in centre
+	let orig = transform(matrices[2], loadShape());
+
+	let transformIndex = 3; // 0 = reflections, 1 = rotations, 2 = shears, 3 = stretches
+	if (ctx == undefined) {
+
+	}
+	else {
+
+		setInterval(drawNextTransformations, 500);
+	}
+	function drawNextTransformations() {
+		console.log(transformIndex);
+		ctx.fillStyle = "#FFFFFF";
+		ctx.fillRect(-200, -200, 400, 400);
+		ctx.lineWidth = 2;
+		ctx.beginPath();
+		ctx.moveTo(0, -200);
+		ctx.lineTo(0, 200);
+		ctx.moveTo(-200, 0);
+		ctx.lineTo(200, 0);
+		ctx.stroke();
+		ctx.closePath();
+
+
+		let shape = orig;
+
+		drawClosedPath(shape);
+		shape = transform(matrices[transformIndex * 3], orig);
+		console.log(shape);
+		drawClosedPath(shape);
+		shape = transform(matrices[transformIndex * 3 + 1], orig);
+		drawClosedPath(shape);
+		shape = transform(matrices[transformIndex * 3 + 2], orig);
+		drawClosedPath(shape);
+		// advance transformation type for next call to this function
+		transformIndex++;
+		transformIndex = transformIndex % 3;
+
+	}
+	function drawClosedPath(coords) { // takes in a 1D array of coords, x and ys interleaved, and draws it
+		if (coords.length >= 4) { // needs at least two sets of coords, so 4 values, to draw a path
+
+			ctx.beginPath();
+			ctx.moveTo(coords[0], coords[1]);
+			let i = 2;
+			while (i < coords.length) {
+				ctx.lineTo(coords[i++], coords[i++]);
+			}
+			ctx.lineTo(coords[0], coords[1]);
+			ctx.stroke();
+			ctx.closePath();
+		}
+
+
+	}
+	function transform(transformMat, coords) {
+		let i = 0;
+		let transformed = [];
+		while (i <= coords.length - 2) { // make sure there's two to process
+			let pair = matVecProd(transformMat, coords.slice(i, i + 2));
+			transformed.push(pair[0], pair[1]);
+			i += 2;
+		}
+		return transformed;
+	}
+	function matVecProd(mat, vec) {
+
+		return [mat[0] * vec[0] + mat[1] * vec[1], mat[2] * vec[0] + mat[3] * vec[1]];
+	}
+	function loadShape() {
+		return [50, 80,
+		100, 120,
+		130, 80,
+		150, 110,
+		170, 80];
+	}
+
+	function loadMatrices() {
+		// gonna fill with 1D representations of matrices in mathematical, not OpenGL, style
+		// reflections
+		let matrices = []; 
+		matrices.push([
+			-1, 0,
+			0, 1]);
+		matrices.push([
+			1, 0, 
+			0, -1]);
+		matrices.push([
+			-1, 0,
+			0, -1]);
+		// 90 degree rotations
+		matrices.push([
+			0, -1,
+			1, 0]);
+		matrices.push([
+			-1, 0,
+			0, -1]);
+		matrices.push([
+			0, 1,
+			-1, 0]);
+		// shears
+		matrices.push([
+			1, -0.5,
+			0, 1]);
+		matrices.push([
+			1, 0, 
+			-0.5, 1]);
+		matrices.push([
+			1, -0.5, 
+			-0.5, 1]);
+		// scales and stretches
+		matrices.push([
+			.5, 0,
+			0, .5]);
+		matrices.push([
+			2, 0, 
+			0, 1]);
+		matrices.push([
+			1, 0, 
+			0, 2]);		
+		return matrices;
+		}
+</script>
+</html>

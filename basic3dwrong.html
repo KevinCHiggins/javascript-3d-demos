@@ -1,0 +1,185 @@
+<!DOCTYPE HTML>
+<html>
+<canvas id="c" width="400px" height="400px"></canvas>
+<script>
+	let c = document.getElementById('c');
+	let ctx = c.getContext('2d');
+	let fudge = 0.002; // fudge factor for amount of perspective distortion
+	let width = c.width;
+	let height = c.height;
+	let transformations = []; // gonna be an array of matrices to apply to vert data - in this demo we won't differentiate between world and object transformations!
+	let rad = 10;
+	let innerRad = 3;
+	let points = 5;
+	let angDiff = Math.PI / points; // angular displacement between adjacent inner and outer corner, so half the angular displacement between points (outer corners)
+	let ang = Math.PI *1.5;
+	let star = [];
+	for (let i = 0; i < points; i++) {
+		star.push(rad * Math.cos(ang)); // outer corner (point)
+		star.push(rad * Math.sin(ang));
+		star.push(0); // Z
+		star.push(1); // W 
+		ang = ang + angDiff;
+		star.push(innerRad * Math.cos(ang)); // inner corner
+		star.push(innerRad * Math.sin(ang));
+		star.push(0); // Z
+		star.push(1); // W
+		ang = ang + angDiff;
+	}
+
+	
+	
+	requestAnimationFrame(frame);
+	function frame(timeMs) {
+		transformations = []
+		//transformations.push(scaleMatrix((10 + Math.cos(timeMs / 1000 * Math.PI)) * 2));
+		transformations.push(scaleMatrix(10));
+		transformations.push(rotYMatrix(timeMs / 1000));
+		let ang = (timeMs / 1000 * Math.PI); // pi is just to make it a different period to the main rotation
+		transformations.push(perspectiveMatrix(fudge));
+		transformations.push(translateMatrix(0, Math.cos(ang) * 90, 0))
+
+
+		let mat = computeTransformationMatrix(transformations);
+		ctx.fillStyle = "#FFFFFF";
+		ctx.fillRect(0, 0, width, height);
+		let centre = [c.width / 2, c.height / 2];
+		drawClosedPath(star, mat, centre);
+		requestAnimationFrame(frame);
+	}
+	function computeTransformationMatrix(transformations) {
+		if (transformations.length == 0) return identityMatrix();
+		let result = transformations[0];
+		let i = 1;
+		while (i < transformations.length) {
+			result = mat4dProd(transformations[i], result); // premultiply by the transformation you want to occur *after*
+			i++;
+		}
+		return result;
+	}
+	function drawPaths(arr, mat, centre) {
+		for (let i = 0; i < arr.length; i++) {
+			drawClosedPath(arr[i], mat, centre);
+		}
+	}
+	function drawClosedPath(coords, mat, centre) {
+		if (coords.length >= 8) { // needs at least two sets of coords, so 8 values, to draw a path
+			ctx.beginPath();
+			ctx.strokeStyle = "#000000";
+			let i = 0;
+			//let pair = [coords[i] + 100, coords[i+1] + 100];// 
+			let vec = mat4dVecProd(mat, [coords[i], coords[i+1], coords[i+2], coords[i+3]]);
+			//vec[3] =0;
+			i = i + 4;
+			ctx.moveTo(centre[0] + vec[0] / (vec[3]), centre[1] + vec[1] / (vec[3]));
+			while (i < coords.length) {
+				//pair = [coords[i]  + 100, coords[i+1] + 100];
+				let vec = mat4dVecProd(mat, [coords[i], coords[i+1], coords[i+2], coords[i+3]]);
+				//vec[3] =0;
+				i = i + 4;
+				ctx.lineTo(centre[0] + vec[0] / (vec[3]), centre[1] + vec[1] / (vec[3])); // perspective divide happens here!
+			}
+			ctx.closePath();
+			ctx.stroke();
+
+		}
+	}
+	// for every vert in inp, makes a connecting line shape as well as a vert in a corresponding shape at displacement of dispVec from inp
+	function pad(inp, dispVec) {
+		let dispInp = [];
+		let arrayOfShapes = []; // lines will be pushed straight in here with each iteration of the loop, while dispInp will be gradually built up and pushed at end
+		for (let i = 0; i < inp.length / 4; i++) { // assume 3D homogenous coords so 4 scalars per vert
+			let currLine = [];
+			for (let j = 0; j < 4; j++) { // connecting-line vert touching original shape (inp)
+				currLine.push(inp[i * 4 + j]);
+			}
+			for (let j = 0; j < 4; j++) { // 2nd connecting-line vert touching displaced shape (dispInp), AND a single vert of the displaced shape dispInp
+				currLine.push(inp[i * 4 + j] + dispVec[j]);
+				dispInp.push(inp[i * 4 + j] + dispVec[j]);
+			}	
+			arrayOfShapes.push(currLine);
+		}
+		arrayOfShapes.push(inp);
+		arrayOfShapes.push(dispInp);
+		return arrayOfShapes;
+	}
+	function mat4dVecProd(mat, vec) {
+		// even though the vector is a 1D array and hence tempting to think of it as a row vector
+		// this operation should be thought of as premultiplying a column vector by the matrix
+		// so, the index for the vector is going downwards
+		return [
+			mat[0] * vec[0] + mat[1] * vec[1] + mat[2] * vec[2] + mat[3] * vec[3],
+			mat[4] * vec[0] + mat[5] * vec[1] + mat[6] * vec[2] + mat[7] * vec[3],
+			mat[8] * vec[0] + mat[9] * vec[1] + mat[10] * vec[2] + mat[11] * vec[3],
+			mat[12] * vec[0] + mat[13] * vec[1] + mat[14] * vec[2] + mat[15] * vec[3]];
+	}
+	function mat4dProd(pre, post) {
+		return [
+			pre[0] * post[0] + pre[1] * post[4] + pre[2] * post[8] + pre[3] * post[12],
+			pre[0] * post[1] + pre[1] * post[5] + pre[2] * post[9] + pre[3] * post[13],
+			pre[0] * post[2] + pre[1] * post[6] + pre[2] * post[10] + pre[3] * post[14],
+			pre[0] * post[3] + pre[1] * post[7] + pre[2] * post[11] + pre[3] * post[15],
+			pre[4] * post[0] + pre[5] * post[4] + pre[6] * post[8] + pre[7] * post[12],
+			pre[4] * post[1] + pre[5] * post[5] + pre[6] * post[9] + pre[7] * post[13],
+			pre[4] * post[2] + pre[5] * post[6] + pre[6] * post[10] + pre[7] * post[14],
+			pre[4] * post[3] + pre[5] * post[7] + pre[6] * post[11] + pre[7] * post[15],
+			pre[8] * post[0] + pre[9] * post[4] + pre[10] * post[8] + pre[11] * post[12],
+			pre[8] * post[1] + pre[9] * post[5] + pre[10] * post[9] + pre[11] * post[13],
+			pre[8] * post[2] + pre[9] * post[6] + pre[10] * post[10] + pre[11] * post[14],
+			pre[8] * post[3] + pre[9] * post[7] + pre[10] * post[11] + pre[11] * post[15],
+			pre[12] * post[0] + pre[13] * post[4] + pre[14] * post[8] + pre[15] * post[12],
+			pre[12] * post[1] + pre[13] * post[5] + pre[14] * post[9] + pre[15] * post[13],
+			pre[12] * post[2] + pre[13] * post[6] + pre[14] * post[10] + pre[15] * post[14],
+			pre[12] * post[3] + pre[13] * post[7] + pre[14] * post[11] + pre[15] * post[15]];
+
+	}
+	function identityMatrix() {
+		return [
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1];	
+	}
+	function scaleMatrix(size) {
+		return [
+			size, 0, 0, 0,
+			0, size, 0, 0,
+			0, 0, size, 0,
+			0, 0, 0, 1];
+	}
+	function rotYMatrix(angRads) {
+		let c = Math.cos(angRads);
+		let s = Math.sin(angRads);
+		return [
+			c, 0, s, 0,
+			0, 1, 0, 0,
+			-s, 0, c, 0,
+			0, 0, 0, 1];
+	}
+	function rotZMatrix(angRads) {
+		let c = Math.cos(angRads);
+		let s = Math.sin(angRads);
+		return [
+			c, s, 0, 0,
+			-s, c, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1];
+	}
+	function translateMatrix(x, y, z) {
+		return [
+			1, 0, 0, x,
+			0, 1, 0, y,
+			0, 0, 1, z,
+			0, 0, 0, 1];
+	}
+	function perspectiveMatrix(fudge) {
+		return [
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, fudge, 1];
+	
+	}
+
+</script>
+</html>
